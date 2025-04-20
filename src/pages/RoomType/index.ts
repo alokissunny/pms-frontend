@@ -1,0 +1,1 @@
+export { RoomTypePage } from './RoomTypePage'; 
