@@ -20,6 +20,10 @@ import {
   Alert,
   CircularProgress,
   Chip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -27,6 +31,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import api from '../../utils/api';
+import { useProperty } from '../../context/PropertyContext';
 
 interface RoomType {
   _id?: string;
@@ -36,6 +41,7 @@ interface RoomType {
   capacity: number;
   amenities?: string[];
   images?: string[];
+  propertyId: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -51,9 +57,11 @@ const validationSchema = Yup.object({
   description: Yup.string(),
   baseRate: Yup.number().required('Base rate is required').min(0, 'Base rate must be positive'),
   capacity: Yup.number().required('Capacity is required').min(1, 'Capacity must be at least 1'),
+  propertyId: Yup.string().required('Property is required'),
 });
 
 export const RoomTypePage: React.FC = () => {
+  const { selectedProperty } = useProperty();
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,14 +70,16 @@ export const RoomTypePage: React.FC = () => {
   const [selectedRoomType, setSelectedRoomType] = useState<RoomType | null>(null);
 
   useEffect(() => {
-    fetchRoomTypes();
-  }, []);
+    if (selectedProperty?._id) {
+      fetchRoomTypes();
+    }
+  }, [selectedProperty?._id]);
 
   const fetchRoomTypes = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await api.get<ApiResponse>('/room-types');
+      const response = await api.get<ApiResponse>(`/room-types?propertyId=${selectedProperty?._id}`);
       
       if (response.data.success) {
         const roomTypesData = Array.isArray(response.data.data) 
@@ -96,6 +106,7 @@ export const RoomTypePage: React.FC = () => {
       baseRate: 0,
       capacity: 1,
       amenities: [],
+      propertyId: selectedProperty?._id || '',
     },
     validationSchema,
     onSubmit: async (values) => {
@@ -111,7 +122,10 @@ export const RoomTypePage: React.FC = () => {
             setError(response.data.message || 'Failed to update room type');
           }
         } else {
-          const response = await api.post<ApiResponse>('/room-types', values);
+          const response = await api.post<ApiResponse>('/room-types', {
+            ...values,
+            propertyId: selectedProperty?._id,
+          });
           if (response.data.success) {
             setSuccessMessage('Room type created successfully');
           } else {
@@ -139,10 +153,20 @@ export const RoomTypePage: React.FC = () => {
         baseRate: roomType.baseRate,
         capacity: roomType.capacity,
         amenities: roomType.amenities || [],
+        propertyId: roomType.propertyId,
       });
     } else {
       setSelectedRoomType(null);
-      formik.resetForm();
+      formik.resetForm({
+        values: {
+          name: '',
+          description: '',
+          baseRate: 0,
+          capacity: 1,
+          amenities: [],
+          propertyId: selectedProperty?._id || '',
+        },
+      });
     }
     setIsDialogOpen(true);
   };
@@ -192,10 +216,17 @@ export const RoomTypePage: React.FC = () => {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
+          disabled={!selectedProperty?._id}
         >
           Add Room Type
         </Button>
       </Box>
+
+      {!selectedProperty?._id && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Please select a property to manage room types
+        </Alert>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -250,16 +281,15 @@ export const RoomTypePage: React.FC = () => {
                     <TableCell>{formatDate(roomType.updatedAt)}</TableCell>
                     <TableCell>
                       <IconButton
-                        color="primary"
+                        size="small"
                         onClick={() => handleOpenDialog(roomType)}
-                        title="Edit"
                       >
                         <EditIcon />
                       </IconButton>
                       <IconButton
+                        size="small"
                         color="error"
-                        onClick={() => roomType._id && handleDeleteRoomType(roomType._id)}
-                        title="Delete"
+                        onClick={() => handleDeleteRoomType(roomType._id!)}
                       >
                         <DeleteIcon />
                       </IconButton>
@@ -272,7 +302,12 @@ export const RoomTypePage: React.FC = () => {
         </TableContainer>
       )}
 
-      <Dialog open={isDialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog
+        open={isDialogOpen}
+        onClose={handleCloseDialog}
+        maxWidth="sm"
+        fullWidth
+      >
         <form onSubmit={formik.handleSubmit}>
           <DialogTitle>
             {selectedRoomType ? 'Edit Room Type' : 'New Room Type'}

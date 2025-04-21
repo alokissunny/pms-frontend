@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Container,
@@ -8,9 +8,15 @@ import {
   Paper,
   Stack,
   Divider,
+  Alert,
+  CircularProgress,
+  Snackbar,
 } from '@mui/material';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
+import { useNavigate } from 'react-router-dom';
+import { propertyService } from '../../services/propertyService';
+import { useProperty } from '../../context/PropertyContext';
 
 interface AddPropertyFormData {
   name: string;
@@ -41,6 +47,14 @@ const validationSchema = Yup.object({
 });
 
 export const AddPropertyPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { refreshProperties } = useProperty();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
+
   const formik = useFormik<AddPropertyFormData>({
     initialValues: {
       name: '',
@@ -58,13 +72,46 @@ export const AddPropertyPage: React.FC = () => {
     validationSchema,
     onSubmit: async (values) => {
       try {
-        console.log('Form values:', values);
-        // TODO: Implement API call to save property
-      } catch (error) {
-        console.error('Error saving property:', error);
+        setLoading(true);
+        setError(null);
+        
+        // Create the property using the service
+        const newProperty = await propertyService.createProperty({
+          ...values,
+          isActive: true,
+          location: {
+            type: 'Point',
+            coordinates: [0, 0] // Default coordinates, should be updated with actual location
+          }
+        });
+        
+        // Refresh the properties list in the context
+        await refreshProperties();
+        
+        // Show success message
+        setSnackbarMessage('Property created successfully');
+        setSnackbarSeverity('success');
+        setSnackbarOpen(true);
+        
+        // Navigate back to dashboard after a short delay
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 1500);
+      } catch (err: any) {
+        console.error('Error creating property:', err);
+        setError(err.response?.data?.error || 'Failed to create property. Please try again.');
+        setSnackbarMessage('Failed to create property');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+      } finally {
+        setLoading(false);
       }
     },
   });
+
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
+  };
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
@@ -73,6 +120,12 @@ export const AddPropertyPage: React.FC = () => {
           Add New Property
         </Typography>
         <Divider sx={{ mb: 4 }} />
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
 
         <form onSubmit={formik.handleSubmit}>
           <Stack spacing={3}>
@@ -91,6 +144,7 @@ export const AddPropertyPage: React.FC = () => {
                   onChange={formik.handleChange}
                   error={formik.touched.name && Boolean(formik.errors.name)}
                   helperText={formik.touched.name && formik.errors.name}
+                  disabled={loading}
                 />
                 <TextField
                   fullWidth
@@ -103,6 +157,7 @@ export const AddPropertyPage: React.FC = () => {
                   onChange={formik.handleChange}
                   error={formik.touched.description && Boolean(formik.errors.description)}
                   helperText={formik.touched.description && formik.errors.description}
+                  disabled={loading}
                 />
               </Stack>
             </Box>
@@ -122,6 +177,7 @@ export const AddPropertyPage: React.FC = () => {
                   onChange={formik.handleChange}
                   error={formik.touched.address?.street && Boolean(formik.errors.address?.street)}
                   helperText={formik.touched.address?.street && formik.errors.address?.street}
+                  disabled={loading}
                 />
                 <Box sx={{ display: 'flex', gap: 2 }}>
                   <TextField
@@ -133,6 +189,7 @@ export const AddPropertyPage: React.FC = () => {
                     onChange={formik.handleChange}
                     error={formik.touched.address?.city && Boolean(formik.errors.address?.city)}
                     helperText={formik.touched.address?.city && formik.errors.address?.city}
+                    disabled={loading}
                   />
                   <TextField
                     fullWidth
@@ -143,6 +200,7 @@ export const AddPropertyPage: React.FC = () => {
                     onChange={formik.handleChange}
                     error={formik.touched.address?.state && Boolean(formik.errors.address?.state)}
                     helperText={formik.touched.address?.state && formik.errors.address?.state}
+                    disabled={loading}
                   />
                 </Box>
                 <Box sx={{ display: 'flex', gap: 2 }}>
@@ -155,6 +213,7 @@ export const AddPropertyPage: React.FC = () => {
                     onChange={formik.handleChange}
                     error={formik.touched.address?.zipCode && Boolean(formik.errors.address?.zipCode)}
                     helperText={formik.touched.address?.zipCode && formik.errors.address?.zipCode}
+                    disabled={loading}
                   />
                   <TextField
                     fullWidth
@@ -165,6 +224,7 @@ export const AddPropertyPage: React.FC = () => {
                     onChange={formik.handleChange}
                     error={formik.touched.address?.country && Boolean(formik.errors.address?.country)}
                     helperText={formik.touched.address?.country && formik.errors.address?.country}
+                    disabled={loading}
                   />
                 </Box>
               </Stack>
@@ -187,6 +247,7 @@ export const AddPropertyPage: React.FC = () => {
                     onChange={formik.handleChange}
                     error={formik.touched.email && Boolean(formik.errors.email)}
                     helperText={formik.touched.email && formik.errors.email}
+                    disabled={loading}
                   />
                   <TextField
                     fullWidth
@@ -197,6 +258,7 @@ export const AddPropertyPage: React.FC = () => {
                     onChange={formik.handleChange}
                     error={formik.touched.website && Boolean(formik.errors.website)}
                     helperText={formik.touched.website && formik.errors.website}
+                    disabled={loading}
                   />
                 </Box>
               </Stack>
@@ -209,13 +271,30 @@ export const AddPropertyPage: React.FC = () => {
                 variant="contained"
                 color="primary"
                 size="large"
+                disabled={loading}
+                startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
               >
-                Add Property
+                {loading ? 'Creating Property...' : 'Add Property'}
               </Button>
             </Box>
           </Stack>
         </form>
       </Paper>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbarSeverity}
+          sx={{ width: '100%' }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }; 

@@ -12,6 +12,7 @@ import { TaskPage } from './pages/Task';
 import { ManageInventoryPage } from './pages/ManageInventory/ManageInventoryPage';
 import { Layout } from './components/layout/Layout';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { PropertyProvider } from './context/PropertyContext';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated } = useAuth();
@@ -23,62 +24,64 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <Router>
-          <Routes>
-            <Route 
-              path="/" 
-              element={<LoginPage />} 
-            />
-            <Route 
-              path="/dashboard" 
-              element={
-                <PrivateRoute>
-                  <DashboardPage />
-                </PrivateRoute>
-              } 
-            />
-            <Route
-              path="/add-property"
-              element={
-                <PrivateRoute>
-                  <AddPropertyPage />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/rooms"
-              element={
-                <PrivateRoute>
-                  <RoomPage />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/room-type"
-              element={
-                <PrivateRoute>
-                  <RoomTypePage />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/manage-inventory"
-              element={
-                <PrivateRoute>
-                  <ManageInventoryPage />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/tasks"
-              element={
-                <PrivateRoute>
-                  <TaskPage />
-                </PrivateRoute>
-              }
-            />
-          </Routes>
-        </Router>
+        <PropertyProvider>
+          <Router>
+            <Routes>
+              <Route 
+                path="/" 
+                element={<LoginPage />} 
+              />
+              <Route 
+                path="/dashboard" 
+                element={
+                  <PrivateRoute>
+                    <DashboardPage />
+                  </PrivateRoute>
+                } 
+              />
+              <Route
+                path="/add-property"
+                element={
+                  <PrivateRoute>
+                    <AddPropertyPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/rooms"
+                element={
+                  <PrivateRoute>
+                    <RoomPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/room-type"
+                element={
+                  <PrivateRoute>
+                    <RoomTypePage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/manage-inventory"
+                element={
+                  <PrivateRoute>
+                    <ManageInventoryPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/tasks"
+                element={
+                  <PrivateRoute>
+                    <TaskPage />
+                  </PrivateRoute>
+                }
+              />
+            </Routes>
+          </Router>
+        </PropertyProvider>
       </AuthProvider>
     </ThemeProvider>
   );

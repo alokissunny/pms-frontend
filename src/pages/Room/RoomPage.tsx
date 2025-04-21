@@ -15,13 +15,27 @@ import {
   Chip,
   Grid,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Tooltip,
 } from '@mui/material';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import EditIcon from '@mui/icons-material/Edit';
 import ImageIcon from '@mui/icons-material/Image';
 import api from '../../utils/api';
+import { useProperty } from '../../context/PropertyContext';
 
 interface RoomType {
   _id: string;
@@ -31,18 +45,29 @@ interface RoomType {
   capacity: number;
 }
 
-interface RoomData {
-  name: string;
-  type: string;
+interface Room {
+  _id?: string;
+  roomNumber: string;
+  propertyId: string;
+  roomType: string | RoomType;
+  floor: number;
+  status: 'available' | 'occupied' | 'maintenance' | 'cleaning';
   bedType: string;
-  roomCount: number;
-  description: string;
-  basePrice: number;
+  description?: string;
+  images?: Array<{
+    url: string;
+    caption?: string;
+    isPrimary: boolean;
+  }>;
+  isActive: boolean;
+  notes?: string;
   amenities: string[];
-  images: string[];
+  lastCleaned?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-const bedTypes = ['King size', 'Queen size', 'Twin', 'Single'];
+const bedTypes = ['king', 'queen', 'double', 'single', 'twin', 'twin_xl', 'california_king'];
 const amenitiesList = [
   { id: 'ac', label: 'AC', icon: '❄️' },
   { id: 'shower', label: 'Shower', icon: '🚿' },
@@ -63,35 +88,57 @@ const amenitiesList = [
 ];
 
 const validationSchema = Yup.object({
-  name: Yup.string().required('Room name is required'),
-  type: Yup.string().required('Room type is required'),
+  roomNumber: Yup.string().required('Room number is required'),
+  propertyId: Yup.string().required('Property is required'),
+  roomType: Yup.string().required('Room type is required'),
+  floor: Yup.number().required('Floor is required'),
   bedType: Yup.string().required('Bed type is required'),
-  roomCount: Yup.number()
-    .required('Room count is required')
-    .min(1, 'Must have at least 1 room'),
-  description: Yup.string().required('Description is required'),
-  basePrice: Yup.number()
-    .required('Base price is required')
-    .min(0, 'Price must be positive'),
+  description: Yup.string(),
   amenities: Yup.array().of(Yup.string()),
-  images: Yup.array().of(Yup.string()),
+  isActive: Yup.boolean().default(true),
+  notes: Yup.string(),
 });
 
 export const RoomPage: React.FC = () => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [selectedRoom, setSelectedRoom] = useState<RoomData | null>(null);
+  const { selectedProperty } = useProperty();
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [roomToDelete, setRoomToDelete] = useState<Room | null>(null);
 
   useEffect(() => {
-    fetchRoomTypes();
-  }, []);
+    if (selectedProperty?._id) {
+      fetchRooms();
+      fetchRoomTypes();
+    }
+  }, [selectedProperty?._id]);
+
+  const fetchRooms = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await api.get(`/rooms?propertyId=${selectedProperty?._id}`);
+      if (response.data.success) {
+        setRooms(response.data.data);
+      } else {
+        setError('Failed to fetch rooms');
+      }
+    } catch (error: any) {
+      console.error('Error fetching rooms:', error);
+      setError(error.response?.data?.error || 'Failed to fetch rooms');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchRoomTypes = async () => {
     try {
-      setIsLoading(true);
-      const response = await api.get('/room-types');
+      const response = await api.get(`/room-types?propertyId=${selectedProperty?._id}`);
       if (response.data.success) {
         setRoomTypes(response.data.data);
       } else {
@@ -99,61 +146,118 @@ export const RoomPage: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Error fetching room types:', error);
-      setError(error.response?.data?.message || 'Failed to fetch room types');
-    } finally {
-      setIsLoading(false);
+      setError(error.response?.data?.error || 'Failed to fetch room types');
     }
   };
 
-  // Mock data for room list
-  const [rooms] = useState<Array<Partial<RoomData>>>([
-    { 
-      name: 'Test',
-      type: 'Deluxe',
-      bedType: 'King size',
-      roomCount: 1,
-      description: '',
-      basePrice: 0,
-      amenities: [],
-      images: []
-    },
-    { 
-      name: 'Test',
-      type: 'Deluxe',
-      bedType: 'King size',
-      roomCount: 1,
-      description: '',
-      basePrice: 0,
-      amenities: [],
-      images: []
-    }
-  ]);
-
-  const formik = useFormik<RoomData>({
+  const formik = useFormik<Room>({
     initialValues: {
-      name: '',
-      type: '',
+      roomNumber: '',
+      propertyId: selectedProperty?._id || '',
+      roomType: '',
+      floor: 1,
+      status: 'available',
       bedType: '',
-      roomCount: 1,
       description: '',
-      basePrice: 0,
-      amenities: [],
       images: [],
+      isActive: true,
+      notes: '',
+      amenities: [],
     },
     validationSchema,
     onSubmit: async (values) => {
       try {
-        console.log('Form values:', values);
-        // TODO: Implement API call to save room
-      } catch (error) {
+        setError(null);
+        setSuccessMessage(null);
+        
+        if (selectedRoom?._id) {
+          // Update existing room
+          const response = await api.put(`/rooms/${selectedRoom._id}`, values);
+          if (response.data.success) {
+            setSuccessMessage('Room updated successfully');
+            fetchRooms();
+            handleCloseDialog();
+          } else {
+            setError(response.data.error || 'Failed to update room');
+          }
+        } else {
+          // Create new room
+          const response = await api.post('/rooms', {
+            ...values,
+            propertyId: selectedProperty?._id,
+          });
+          if (response.data.success) {
+            setSuccessMessage('Room created successfully');
+            fetchRooms();
+            handleCloseDialog();
+          } else {
+            setError(response.data.error || 'Failed to create room');
+          }
+        }
+      } catch (error: any) {
         console.error('Error saving room:', error);
+        setError(error.response?.data?.error || 'Failed to save room');
       }
     },
   });
 
-  const handleGenerateDescription = () => {
-    // TODO: Implement AI description generation
-    console.log('Generating description...');
+  const handleOpenDialog = (room?: Room) => {
+    if (room) {
+      setSelectedRoom(room);
+      formik.setValues({
+        roomNumber: room.roomNumber,
+        propertyId: room.propertyId,
+        roomType: room.roomType,
+        floor: room.floor,
+        status: room.status,
+        bedType: room.bedType,
+        description: room.description || '',
+        images: room.images || [],
+        isActive: room.isActive,
+        notes: room.notes || '',
+        amenities: room.amenities || [],
+      });
+    } else {
+      setSelectedRoom(null);
+      formik.resetForm();
+    }
+    setIsDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false);
+    setSelectedRoom(null);
+    formik.resetForm();
+    setError(null);
+    setSuccessMessage(null);
+  };
+
+  const handleDeleteClick = (room: Room) => {
+    setRoomToDelete(room);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!roomToDelete?._id) return;
+    
+    try {
+      setError(null);
+      setSuccessMessage(null);
+      const response = await api.delete(`/rooms/${roomToDelete._id}`);
+      
+      if (response.data.success) {
+        setSuccessMessage('Room deleted successfully');
+        fetchRooms();
+      } else {
+        setError(response.data.error || 'Failed to delete room');
+      }
+    } catch (error: any) {
+      console.error('Error deleting room:', error);
+      setError(error.response?.data?.error || 'Failed to delete room');
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setRoomToDelete(null);
+    }
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -164,76 +268,167 @@ export const RoomPage: React.FC = () => {
     }
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'available':
+        return 'success';
+      case 'occupied':
+        return 'error';
+      case 'maintenance':
+        return 'warning';
+      case 'cleaning':
+        return 'info';
+      default:
+        return 'default';
+    }
+  };
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+      
+      {successMessage && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMessage(null)}>
+          {successMessage}
+        </Alert>
+      )}
+
+      {!selectedProperty?._id && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Please select a property to manage rooms
+        </Alert>
+      )}
+
       {/* Room List Section */}
       <Paper sx={{ p: 2, mb: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h5">Rooms</Typography>
           <Button
             startIcon={<AddIcon />}
-            variant="outlined"
-            onClick={() => setIsEditing(true)}
+            variant="contained"
+            onClick={() => handleOpenDialog()}
+            disabled={!selectedProperty?._id}
           >
             Create Room
           </Button>
-          <Box sx={{ display: 'flex', gap: 2, ml: 4 }}>
-            {rooms.map((room, index) => (
-              <Paper
-                key={index}
-                sx={{
-                  p: 2,
-                  cursor: 'pointer',
-                  border: '1px solid #e0e0e0',
-                  '&:hover': { borderColor: 'primary.main' },
-                }}
-                onClick={() => {
-                  setSelectedRoom(room as RoomData);
-                  setIsEditing(true);
-                }}
-              >
-                <Typography variant="subtitle1">{room.name}</Typography>
-                <Typography variant="body2" color="textSecondary">
-                  {room.type}
-                </Typography>
-              </Paper>
-            ))}
-          </Box>
         </Box>
+
+        {isLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+            <CircularProgress />
+          </Box>
+        ) : rooms.length === 0 ? (
+          <Typography variant="body1" sx={{ textAlign: 'center', p: 3 }}>
+            No rooms found. Create a new room to get started.
+          </Typography>
+        ) : (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Room Number</TableCell>
+                  <TableCell>Floor</TableCell>
+                  <TableCell>Room Type</TableCell>
+                  <TableCell>Bed Type</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rooms.map((room) => (
+                  <TableRow key={room._id}>
+                    <TableCell>{room.roomNumber}</TableCell>
+                    <TableCell>{room.floor}</TableCell>
+                    <TableCell>
+                      {typeof room.roomType === 'string' 
+                        ? (roomTypes.find(type => type._id === room.roomType)?.name || 'Unknown Room Type')
+                        : (room.roomType?.name || 'Unknown Room Type')}
+                    </TableCell>
+                    <TableCell>{room.bedType}</TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={room.status} 
+                        color={getStatusColor(room.status) as any}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Tooltip title="Edit">
+                        <IconButton 
+                          size="small" 
+                          onClick={() => handleOpenDialog(room)}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton 
+                          size="small" 
+                          color="error"
+                          onClick={() => handleDeleteClick(room)}
+                        >
+                          <DeleteOutlineIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </Paper>
 
-      {/* Room Edit Form */}
-      {isEditing && (
-        <Paper sx={{ p: 4 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 4 }}>
-            <Typography variant="h5">
-              {selectedRoom ? 'Edit Room' : 'Create Room'}
-            </Typography>
-            <Button variant="contained" color="primary" onClick={formik.submitForm}>
-              {selectedRoom ? 'Update' : 'Create'}
-            </Button>
-          </Box>
-
+      {/* Room Edit Dialog */}
+      <Dialog 
+        open={isDialogOpen} 
+        onClose={handleCloseDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedRoom ? 'Edit Room' : 'Create Room'}
+        </DialogTitle>
+        <DialogContent>
           <form onSubmit={formik.handleSubmit}>
-            <Stack spacing={3}>
+            <Stack spacing={3} sx={{ mt: 2 }}>
               <Box sx={{ display: 'flex', gap: 2 }}>
                 <TextField
                   fullWidth
-                  id="name"
-                  name="name"
-                  label="Room Name"
-                  value={formik.values.name}
+                  id="roomNumber"
+                  name="roomNumber"
+                  label="Room Number"
+                  value={formik.values.roomNumber}
                   onChange={formik.handleChange}
-                  error={formik.touched.name && Boolean(formik.errors.name)}
-                  helperText={formik.touched.name && formik.errors.name}
+                  error={formik.touched.roomNumber && Boolean(formik.errors.roomNumber)}
+                  helperText={formik.touched.roomNumber && formik.errors.roomNumber}
                 />
+                <TextField
+                  fullWidth
+                  id="floor"
+                  name="floor"
+                  label="Floor"
+                  type="number"
+                  value={formik.values.floor}
+                  onChange={formik.handleChange}
+                  error={formik.touched.floor && Boolean(formik.errors.floor)}
+                  helperText={formik.touched.floor && formik.errors.floor}
+                />
+              </Box>
+
+              <Box sx={{ display: 'flex', gap: 2 }}>
                 <FormControl fullWidth>
                   <InputLabel>Room Type</InputLabel>
                   <Select
-                    id="type"
-                    name="type"
-                    value={formik.values.type}
+                    id="roomType"
+                    name="roomType"
+                    value={formik.values.roomType}
                     onChange={formik.handleChange}
-                    error={formik.touched.type && Boolean(formik.errors.type)}
+                    error={formik.touched.roomType && Boolean(formik.errors.roomType)}
                     label="Room Type"
                   >
                     {isLoading ? (
@@ -251,9 +446,6 @@ export const RoomPage: React.FC = () => {
                     )}
                   </Select>
                 </FormControl>
-              </Box>
-
-              <Box sx={{ display: 'flex', gap: 2 }}>
                 <FormControl fullWidth>
                   <InputLabel>Bed Type</InputLabel>
                   <Select
@@ -271,17 +463,6 @@ export const RoomPage: React.FC = () => {
                     ))}
                   </Select>
                 </FormControl>
-                <TextField
-                  fullWidth
-                  id="roomCount"
-                  name="roomCount"
-                  label="Room Count"
-                  type="number"
-                  value={formik.values.roomCount}
-                  onChange={formik.handleChange}
-                  error={formik.touched.roomCount && Boolean(formik.errors.roomCount)}
-                  helperText={formik.touched.roomCount && formik.errors.roomCount}
-                />
               </Box>
 
               <Box>
@@ -297,14 +478,6 @@ export const RoomPage: React.FC = () => {
                   error={formik.touched.description && Boolean(formik.errors.description)}
                   helperText={formik.touched.description && formik.errors.description}
                 />
-                <Button
-                  variant="contained"
-                  color="success"
-                  sx={{ mt: 1 }}
-                  onClick={handleGenerateDescription}
-                >
-                  Generate Description using AI
-                </Button>
               </Box>
 
               <Box>
@@ -346,34 +519,6 @@ export const RoomPage: React.FC = () => {
 
               <Box>
                 <Typography variant="subtitle1" gutterBottom>
-                  Base Price (2 Guests)
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Typography>₹</Typography>
-                  <TextField
-                    id="basePrice"
-                    name="basePrice"
-                    type="number"
-                    value={formik.values.basePrice}
-                    onChange={formik.handleChange}
-                    error={formik.touched.basePrice && Boolean(formik.errors.basePrice)}
-                    helperText={formik.touched.basePrice && formik.errors.basePrice}
-                  />
-                  <Button variant="outlined" size="small">
-                    Edit
-                  </Button>
-                </Box>
-                <Button
-                  variant="outlined"
-                  sx={{ mt: 2 }}
-                  startIcon={<AddIcon />}
-                >
-                  Configure Hourly Rate
-                </Button>
-              </Box>
-
-              <Box>
-                <Typography variant="subtitle1" gutterBottom>
                   Amenities
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
@@ -394,10 +539,65 @@ export const RoomPage: React.FC = () => {
                   ))}
                 </Box>
               </Box>
+
+              <Box>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={2}
+                  id="notes"
+                  name="notes"
+                  label="Notes"
+                  value={formik.values.notes}
+                  onChange={formik.handleChange}
+                  error={formik.touched.notes && Boolean(formik.errors.notes)}
+                  helperText={formik.touched.notes && formik.errors.notes}
+                />
+              </Box>
             </Stack>
           </form>
-        </Paper>
-      )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            color="primary" 
+            onClick={() => formik.handleSubmit()}
+            disabled={formik.isSubmitting || !selectedProperty?._id}
+          >
+            {formik.isSubmitting ? (
+              <CircularProgress size={24} />
+            ) : selectedRoom ? (
+              'Update'
+            ) : (
+              'Create'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+      >
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete room {roomToDelete?.roomNumber}? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            color="error" 
+            onClick={handleDeleteConfirm}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }; 
