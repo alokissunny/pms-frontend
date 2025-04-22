@@ -36,6 +36,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import api from '../../utils/api';
+import { useProperty } from '../../context/PropertyContext';
 
 interface Guest {
   firstName: string;
@@ -95,6 +96,7 @@ interface Reservation {
   notes?: string;
   createdAt?: string;
   updatedAt?: string;
+  propertyId: string;
 }
 
 interface ApiResponse {
@@ -143,6 +145,7 @@ const paymentStatusColors: Record<string, 'default' | 'primary' | 'secondary' | 
 };
 
 export const ManageInventoryPage: React.FC = () => {
+  const { selectedProperty } = useProperty();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -163,13 +166,15 @@ export const ManageInventoryPage: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchReservations();
-    fetchRoomTypes();
-  }, [page, filters]);
+    if (selectedProperty?._id) {
+      fetchReservations();
+      fetchRoomTypes();
+    }
+  }, [page, filters, selectedProperty?._id]);
 
   const fetchRoomTypes = async () => {
     try {
-      const response = await api.get<{ success: boolean; data: RoomType[] }>('/room-types');
+      const response = await api.get<{ success: boolean; data: RoomType[] }>(`/room-types?propertyId=${selectedProperty?._id}`);
       if (response.data.success) {
         setRoomTypes(response.data.data);
       }
@@ -187,6 +192,7 @@ export const ManageInventoryPage: React.FC = () => {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '10',
+        propertyId: selectedProperty?._id || '',
         ...Object.fromEntries(
           Object.entries(filters).filter(([_, value]) => value !== '')
         ),
@@ -233,6 +239,7 @@ export const ManageInventoryPage: React.FC = () => {
       totalAmount: 0,
       paymentStatus: 'pending',
       source: 'direct',
+      propertyId: selectedProperty?._id || '',
     },
     validationSchema,
     onSubmit: async (values) => {
@@ -248,7 +255,10 @@ export const ManageInventoryPage: React.FC = () => {
             setError(response.data.error || 'Failed to update reservation');
           }
         } else {
-          const response = await api.post<ApiResponse>('/reservations', values);
+          const response = await api.post<ApiResponse>('/reservations', {
+            ...values,
+            propertyId: selectedProperty?._id,
+          });
           if (response.data.success) {
             setSuccessMessage('Reservation created successfully');
           } else {
@@ -332,10 +342,17 @@ export const ManageInventoryPage: React.FC = () => {
           variant="contained"
           color="primary"
           onClick={() => handleOpenDialog()}
+          disabled={!selectedProperty?._id}
         >
           New Reservation
         </Button>
       </Box>
+
+      {!selectedProperty?._id && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Please select a property to manage reservations
+        </Alert>
+      )}
 
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 4 }}>
