@@ -40,7 +40,7 @@ export const LoginPage: React.FC = () => {
         setError('');
         setIsLoading(true);
         await login(values.email, values.password);
-        navigate('/dashboard');
+        navigate('/add-property');
       } catch (error) {
         setError(error instanceof Error ? error.message : 'Login failed. Please try again.');
       } finally {

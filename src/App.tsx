@@ -35,7 +35,7 @@ function App() {
                 path="/dashboard" 
                 element={
                   <PrivateRoute>
-                    <DashboardPage />
+                    <Navigate to="/add-property" replace />
                   </PrivateRoute>
                 } 
               />

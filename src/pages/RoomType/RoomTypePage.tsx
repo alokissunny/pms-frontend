@@ -271,7 +271,7 @@ export const RoomTypePage: React.FC = () => {
                     <TableCell>{roomType.name}</TableCell>
                     <TableCell>{roomType.description || '-'}</TableCell>
                     <TableCell>
-                      ${roomType.baseRate.toLocaleString('en-US', {
+                      ₹{roomType.baseRate.toLocaleString('en-IN', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
@@ -352,7 +352,7 @@ export const RoomTypePage: React.FC = () => {
                 error={formik.touched.baseRate && Boolean(formik.errors.baseRate)}
                 helperText={formik.touched.baseRate && formik.errors.baseRate}
                 InputProps={{
-                  startAdornment: <Typography sx={{ mr: 1 }}>$</Typography>,
+                  startAdornment: <Typography sx={{ mr: 1 }}>₹</Typography>,
                 }}
               />
               <TextField
